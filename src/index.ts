@@ -6,7 +6,7 @@ import { schedule } from "node-cron";
 const app = new Hono()
 app.route('/api', Api)
 
-// loadTask()
+loadTask()
 schedule('* 8,20 * * *', async () => {
   await loadTask()
 });
