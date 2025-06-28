@@ -48,7 +48,19 @@ const insertModQuery = ModsDB.query<{}, ModCreateSchema>(`
 const getModQuery = ModsDB.query<ModSchema, { $tag: string, $hash: string, $extension: 'mtmod' | 'wotmod' }>(
   `select * from Mods where tag = $tag and extension = $extension and hash = $hash`
 )
-const getModsQuery = ModsDB.query<ModSchema, {}>(`select * from Mods`)
+const getLatestModsQuery = ModsDB.query<ModSchema, {}>(`
+  WITH 
+    LatestMods AS (
+      SELECT *,
+            ROW_NUMBER() OVER (PARTITION BY tag, extension ORDER BY date DESC) AS rn
+      FROM Mods
+    )
+  SELECT *
+  FROM LatestMods
+  WHERE rn = 1;
+`)
+const getModsQuery = ModsDB.query<ModSchema, {}>(`select * from Mods order by date DESC`)
+
 
 function compareVersions(a: string, b: string): number {
   const aParts = a.split('.').map(Number);
@@ -190,6 +202,12 @@ async function loadModFile(asset: {
   }
 }
 
+async function loadMod(assets: ReturnType<typeof assetsToGame>) {
+  const mtMod = assets.mt ? await loadModFile(assets.mt) : null;
+  const wotMod = assets.wot ? await loadModFile(assets.wot) : null;
+  return { mtMod, wotMod }
+}
+
 async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFile>>>, tag: string, extension: 'mtmod' | 'wotmod') {
 
   const url = `mods/${tag}/${file.hash}/${file.withoutExtName}.${extension}`
@@ -211,14 +229,8 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
       $filename: file.fullName,
       $url: url
     });
+    cacheInvalidate();
   }
-
-}
-
-async function loadMod(assets: ReturnType<typeof assetsToGame>) {
-  const mtMod = assets.mt ? await loadModFile(assets.mt) : null;
-  const wotMod = assets.wot ? await loadModFile(assets.wot) : null;
-  return { mtMod, wotMod }
 }
 
 async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string) {
@@ -255,9 +267,95 @@ export async function loadTask() {
   for (const mod of mods) {
     if (!mod.source) continue;
 
-    const modStrategy = strategy[mod.source.type];
-    await modStrategy(mod.tag, mod.source as any);
+    try {
+      const modStrategy = strategy[mod.source.type];
+      await modStrategy(mod.tag, mod.source as any);
+    } catch (error) {
+      console.error(`Error loading mod ${mod.tag} from source ${mod.source.type}:`, error);
+      continue;
+    }
   }
 
   console.log('Mods loaded successfully');
 }
+
+type ModVariant = {
+  id: string
+  version: string | null
+  hash: string
+  filename: string
+  url: string
+  date: string
+}
+
+function getModVariant(mod: ModSchema) {
+  return {
+    id: mod.id,
+    filename: mod.filename,
+    version: mod.version,
+    hash: mod.hash,
+    url: mod.url,
+    date: mod.date.split(' ').at(0) ?? '-'
+  }
+}
+
+function cacheInvalidate() {
+  cacheLatestMods = null;
+  cacheMods = null;
+}
+
+let cacheLatestMods: Record<string, { mtmod: ModVariant | null; wotmod: ModVariant | null; }> | null = null;
+export function getLatestMods() {
+
+  if (cacheLatestMods) return cacheLatestMods;
+
+  const modsList = getLatestModsQuery.all({})
+
+  const modsMap = new Map<string, { mtmod: ModVariant | null, wotmod: ModVariant | null }>();
+
+  for (const mod of modsList) {
+    const variant = getModVariant(mod)
+
+    if (modsMap.has(mod.tag)) {
+      const existing = modsMap.get(mod.tag)!;
+      if (mod.extension === 'mtmod') existing.mtmod = variant
+      else if (mod.extension === 'wotmod') existing.wotmod = variant
+    }
+    else {
+      modsMap.set(mod.tag, {
+        mtmod: mod.extension === 'mtmod' ? variant : null,
+        wotmod: mod.extension === 'wotmod' ? variant : null
+      });
+    }
+  }
+
+  cacheLatestMods = Object.fromEntries(modsMap.entries())
+  return cacheLatestMods
+}
+
+let cacheMods: Record<string, { mtmod: ModVariant[], wotmod: ModVariant[] }> | null = null;
+export function getMods() {
+
+  if (cacheMods) return cacheMods;
+
+  const modsList = getModsQuery.all({})
+
+  const modsMap = new Map<string, { mtmod: ModVariant[], wotmod: ModVariant[] }>();
+
+  for (const mod of modsList) {
+    const variant = getModVariant(mod)
+
+    if (!modsMap.has(mod.tag)) {
+      modsMap.set(mod.tag, { mtmod: [], wotmod: [] });
+    }
+
+    const existing = modsMap.get(mod.tag)!;
+    if (mod.extension === 'mtmod') existing.mtmod.push(variant)
+    else if (mod.extension === 'wotmod') existing.wotmod.push(variant)
+  }
+
+  cacheMods = Object.fromEntries(modsMap.entries())
+  return cacheMods
+}
+
+getMods()

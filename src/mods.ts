@@ -3,6 +3,7 @@ type ModsTags =
   'wotstat.analytics' |
   'wotstat.positions' |
   'wotstat.widgets' |
+  'wotstat.lootbox-open-multiplier' |
   'me.poliroid.modslistapi-wotstat' |
   'izeberg.modssettingsapi'
 
@@ -23,16 +24,11 @@ type Mod = {
 
 
 export const mods: Mod[] = [
-  {
-    tag: 'wotstat.analytics',
-    source: {
-      type: 'github',
-      owner: 'wotstat',
-      repo: 'wotstat-analytics'
-    }
-  },
-  { tag: 'wotstat.positions', },
-  { tag: 'wotstat.widgets', },
+  { tag: 'wotstat.analytics', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-analytics' } },
+  { tag: 'wotstat.positions', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-positions' } },
+  { tag: 'wotstat.widgets', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-widgets' } },
+  { tag: 'wotstat.lootbox-open-multiplier', source: { type: 'github', owner: 'wotstat', repo: 'lootbox-open-multiplier' } },
+  { tag: 'izeberg.modssettingsapi', source: { type: 'github', owner: 'izeberg', repo: 'modssettingsapi' } },
   {
     tag: 'me.poliroid.modslistapi-wotstat',
     source: {
@@ -41,12 +37,4 @@ export const mods: Mod[] = [
       repoId: 26509092
     }
   },
-  {
-    tag: 'izeberg.modssettingsapi',
-    source: {
-      type: 'github',
-      owner: 'izeberg',
-      repo: 'modssettingsapi'
-    }
-  }
 ]

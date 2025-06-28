@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { getLatestMods, getMods } from './mods-loader'
 
 const app = new Hono()
 
@@ -10,10 +11,13 @@ app.get('/latest-game-version', c => {
   })
 })
 
-app.get('/mods', c => {
-  return c.json({
 
-  })
+app.get('/mods', c => {
+  return c.json(getMods())
+})
+
+app.get('/mods-latest', c => {
+  return c.json(getLatestMods())
 })
 
 export default app
