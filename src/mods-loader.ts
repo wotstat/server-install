@@ -2,6 +2,7 @@ import { mods, type ModSource } from "./mods";
 import { XMLParser } from 'fast-xml-parser';
 import unzipper from 'unzipper'
 import { Database } from "bun:sqlite";
+import { rm } from "node:fs/promises";
 
 const parser = new XMLParser();
 const hasher = new Bun.CryptoHasher("sha256");
@@ -60,6 +61,7 @@ const getLatestModsQuery = ModsDB.query<ModSchema, {}>(`
   WHERE rn = 1;
 `)
 const getModsQuery = ModsDB.query<ModSchema, {}>(`select * from Mods order by date DESC`)
+const deleteModByTagQuery = ModsDB.query<{}, { $tag: string }>(`delete from Mods where tag = $tag`)
 
 
 function compareVersions(a: string, b: string): number {
@@ -233,6 +235,13 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
   }
 }
 
+async function removeModByTag(tag: string) {
+  const url = `./store/mods/${tag}`;
+  await rm(url, { recursive: true, force: true });
+  deleteModByTagQuery.run({ $tag: tag });
+  cacheInvalidate();
+}
+
 async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string) {
 
   const { mtMod, wotMod } = mod;
@@ -274,6 +283,16 @@ export async function loadTask() {
       console.error(`Error loading mod ${mod.tag} from source ${mod.source.type}:`, error);
       continue;
     }
+  }
+
+  const modsList = getModsQuery.all({})
+  const tags = new Set(modsList.map(mod => mod.tag));
+  const targetTags = new Set<string>(mods.map(m => m.tag));
+
+  for (const tag of tags) {
+    if (targetTags.has(tag)) continue;
+    console.log(`Removing mod: ${tag}`);
+    await removeModByTag(tag)
   }
 
   console.log('Mods loaded successfully');
@@ -357,5 +376,3 @@ export function getMods() {
   cacheMods = Object.fromEntries(modsMap.entries())
   return cacheMods
 }
-
-getMods()
