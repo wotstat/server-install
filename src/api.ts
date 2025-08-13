@@ -44,7 +44,7 @@ async function updateVersions() {
 }
 
 updateVersions()
-schedule('*/5 * * * *', async () => {
+schedule('*/1 * * * *', async () => {
   await updateVersions()
 });
 
