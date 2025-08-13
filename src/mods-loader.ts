@@ -124,7 +124,7 @@ function assetsToGame(assets: NonNullable<ReturnType<typeof modAssetPrepare>>[])
 async function loadGithubLatestReleaseInfo(owner: string, repo: string) {
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
 
-  if (!response.ok) throw new Error(`Failed to fetch latest release info for ${owner}/${repo}`);
+  if (!response.ok) throw new Error(`Failed to fetch latest release info for ${owner}/${repo}: [${response.statusText}] ${await response.text()}`);
 
   const data = await response.json() as GitHubRelease
   const assets = data.assets
@@ -280,7 +280,8 @@ export async function loadTask() {
       const modStrategy = strategy[mod.source.type];
       await modStrategy(mod.tag, mod.source as any);
     } catch (error) {
-      console.error(`Error loading mod ${mod.tag} from source ${mod.source.type}:`, error);
+      console.error(`Error loading mod ${mod.tag} from source ${mod.source.type}: ${error}`);
+      console.error(error);
       continue;
     }
   }
