@@ -8,9 +8,11 @@ const app = new Hono()
 app.use(cors())
 app.route('/api', Api)
 
-loadTask()
+try { loadTask() }
+catch (error) { console.error(error) }
 schedule('* 8,20 * * *', async () => {
-  await loadTask()
+  try { await loadTask() }
+  catch (error) { console.error(error) }
 });
 
 export default app
