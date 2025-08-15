@@ -249,7 +249,7 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
 
   const existingMod = getModQuery.get({ $tag: tag, $extension: extension, $hash: file.hash });
 
-  const canaryPublish = canaryPercent !== null ? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString() : null;
+  const canaryPublish = canaryPercent !== null ? new Date().toISOString() : null;
 
   if (!existingMod) {
     insertModQuery.run({
