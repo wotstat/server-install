@@ -16,6 +16,8 @@ type ModSchema = {
   hash: string
   filename: string
   url: string
+  canaryPublish: string | null
+  canaryPercent: number | null
   date: string
 }
 
@@ -27,6 +29,8 @@ type ModCreateSchema = {
   $hash: string
   $filename: string
   $url: string
+  $canaryPublish: string | null
+  $canaryPercent: number | null
 }
 
 const ModsDB = new Database('./store/mods.sqlite', { create: true })
@@ -39,13 +43,21 @@ ModsDB.exec(`create table if not exists Mods (
   filename text not null,
   url text not null,
   date datetime not null default (datetime('now')),
+  canaryPublish datetime default null,
+  canaryPercent decimal default null,
   primary key (tag, id, extension)
 )`);
 
 const insertModQuery = ModsDB.query<{}, ModCreateSchema>(`
-  insert or replace into Mods (tag, id, version, extension, hash, filename, url, date)
-  values ($tag, $id, $version, $extension, $hash, $filename, $url, datetime('now'))`
+  insert or replace into Mods (tag, id, version, extension, hash, filename, url, date, canaryPublish, canaryPercent)
+  values ($tag, $id, $version, $extension, $hash, $filename, $url, datetime('now'), $canaryPublish, $canaryPercent)`
 )
+const updateCanaryPercent = ModsDB.query<{}, { $tag: string, $hash: string, $extension: 'mtmod' | 'wotmod', $canaryPercent: number | null }>(`
+  update Mods set canaryPercent = $canaryPercent where tag = $tag and hash = $hash and extension = $extension
+`)
+const updateCanary = ModsDB.query<{}, { $tag: string, $hash: string, $extension: 'mtmod' | 'wotmod', $canaryPublish: string | null, $canaryPercent: number | null }>(`
+  update Mods set canaryPublish = $canaryPublish, canaryPercent = $canaryPercent where tag = $tag and hash = $hash and extension = $extension
+`)
 const getModQuery = ModsDB.query<ModSchema, { $tag: string, $hash: string, $extension: 'mtmod' | 'wotmod' }>(
   `select * from Mods where tag = $tag and extension = $extension and hash = $hash`
 )
@@ -83,6 +95,7 @@ function compareVersions(a: string, b: string): number {
 
 type GitHubRelease = {
   tag_name: string;
+  body: string;
   assets: {
     name: string;
     browser_download_url: string;
@@ -99,6 +112,11 @@ type GitLabReleases = {
   }
 }[]
 
+type LoadInfoStrategyResult = {
+  assets: ReturnType<typeof modAssets>;
+  canary: number | null;
+};
+
 function modAssetPrepare(name: string, url: string) {
   const match = name.match(/^(.*?)_?((?:\d+\.)*(?:\d+))?\.(mtmod|wotmod)$/);
 
@@ -114,24 +132,30 @@ function modAssetPrepare(name: string, url: string) {
   };
 }
 
-function assetsToGame(assets: NonNullable<ReturnType<typeof modAssetPrepare>>[]) {
+function modAssets(assets: NonNullable<ReturnType<typeof modAssetPrepare>>[]) {
   const mt = assets.filter(asset => asset.game === 'mtmod').sort((a, b) => compareVersions(a.nameVersion, b.nameVersion)).at(-1);
   const wot = assets.filter(asset => asset.game === 'wotmod').sort((a, b) => compareVersions(a.nameVersion, b.nameVersion)).at(-1);
 
   return { mt, wot };
 }
 
-async function loadGithubLatestReleaseInfo(owner: string, repo: string) {
+async function loadGithubLatestReleaseInfo(owner: string, repo: string): Promise<LoadInfoStrategyResult> {
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
 
   if (!response.ok) throw new Error(`Failed to fetch latest release info for ${owner}/${repo}: [${response.statusText}] ${await response.text()}`);
 
   const data = await response.json() as GitHubRelease
+
+  const match = data.body.match(/`canary_upgrade=(\d+.\d+|\d+)?`/)
+
   const assets = data.assets
     .map(asset => modAssetPrepare(asset.name, asset.browser_download_url))
     .filter(t => t !== null)
 
-  return assetsToGame(assets);
+  return {
+    assets: modAssets(assets),
+    canary: match ? Number(match[1]) : null
+  };
 }
 
 async function loadGitlabLatestReleaseInfo(repo: string) {
@@ -146,7 +170,7 @@ async function loadGitlabLatestReleaseInfo(repo: string) {
   console.log(latestRelease?.assets.sources);
 }
 
-async function loadGitlabLatestReleaseInfoFromDescription(repoId: number) {
+async function loadGitlabLatestReleaseInfoFromDescription(repoId: number): Promise<LoadInfoStrategyResult> {
   const response = await fetch(`https://gitlab.com/api/v4/projects/${repoId}/releases`);
 
   if (!response.ok) throw new Error(`Failed to fetch latest release info for ${repoId}`);
@@ -161,7 +185,10 @@ async function loadGitlabLatestReleaseInfoFromDescription(repoId: number) {
     .map(m => modAssetPrepare(m[2]!, `https://gitlab.com/-/project/${repoId}${m[1]}`))
     .filter(t => t !== null)
 
-  return assetsToGame(assets);
+  return {
+    assets: modAssets(assets),
+    canary: null
+  };
 }
 
 async function downloadModFile(url: string) {
@@ -204,13 +231,13 @@ async function loadModFile(asset: {
   }
 }
 
-async function loadMod(assets: ReturnType<typeof assetsToGame>) {
+async function loadMod(assets: ReturnType<typeof modAssets>) {
   const mtMod = assets.mt ? await loadModFile(assets.mt) : null;
   const wotMod = assets.wot ? await loadModFile(assets.wot) : null;
   return { mtMod, wotMod }
 }
 
-async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFile>>>, tag: string, extension: 'mtmod' | 'wotmod') {
+async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFile>>>, tag: string, extension: 'mtmod' | 'wotmod', canaryPercent: number | null) {
 
   const url = `mods/${tag}/${file.hash}/${file.withoutExtName}.${extension}`
   const path = `./store/${url}`;
@@ -221,6 +248,9 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
   }
 
   const existingMod = getModQuery.get({ $tag: tag, $extension: extension, $hash: file.hash });
+
+  const canaryPublish = canaryPercent !== null ? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString() : null;
+
   if (!existingMod) {
     insertModQuery.run({
       $tag: tag,
@@ -229,9 +259,20 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
       $extension: extension,
       $hash: file.hash,
       $filename: file.fullName,
-      $url: url
+      $url: url,
+      $canaryPublish: canaryPublish,
+      $canaryPercent: canaryPercent
     });
     cacheInvalidate();
+  } else {
+    if (existingMod.canaryPercent !== canaryPercent && canaryPercent !== null) {
+      if (existingMod.canaryPublish === null) {
+        updateCanary.run({ $tag: tag, $hash: file.hash, $extension: extension, $canaryPublish: canaryPublish, $canaryPercent: canaryPercent });
+      } else {
+        updateCanaryPercent.run({ $tag: tag, $hash: file.hash, $extension: extension, $canaryPercent: canaryPercent });
+      }
+      cacheInvalidate();
+    }
   }
 }
 
@@ -242,7 +283,7 @@ async function removeModByTag(tag: string) {
   cacheInvalidate();
 }
 
-async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string) {
+async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string, canaryPercent: number | null) {
 
   const { mtMod, wotMod } = mod;
 
@@ -251,21 +292,21 @@ async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string) {
     return null;
   }
 
-  await saveModFile(mtMod ? mtMod : wotMod!, tag, 'mtmod')
-  await saveModFile(wotMod ? wotMod : mtMod!, tag, 'wotmod')
+  await saveModFile(mtMod ? mtMod : wotMod!, tag, 'mtmod', canaryPercent)
+  await saveModFile(wotMod ? wotMod : mtMod!, tag, 'wotmod', canaryPercent)
 }
 
 
 const strategy = {
   'gitlab-description': async (tag: string, source: ModSource & { type: 'gitlab-description' }) => {
     const assets = await loadGitlabLatestReleaseInfoFromDescription(source.repoId);
-    const modFile = await loadMod(assets);
-    await saveMod(modFile, tag);
+    const modFile = await loadMod(assets.assets);
+    await saveMod(modFile, tag, assets.canary);
   },
   'github': async (tag: string, source: ModSource & { type: 'github' }) => {
     const assets = await loadGithubLatestReleaseInfo(source.owner, source.repo);
-    const modFile = await loadMod(assets);
-    await saveMod(modFile, tag);
+    const modFile = await loadMod(assets.assets);
+    await saveMod(modFile, tag, assets.canary);
   },
 } as const;
 
@@ -315,7 +356,11 @@ function getModVariant(mod: ModSchema) {
     version: mod.version,
     hash: mod.hash,
     url: mod.url,
-    date: mod.date.split(' ').at(0) ?? '-'
+    date: mod.date.split(' ').at(0) ?? '-',
+    canary: mod.canaryPublish !== null && mod.canaryPercent !== null ? {
+      publish: mod.canaryPublish,
+      percent: mod.canaryPercent
+    } : undefined
   }
 }
 
@@ -376,4 +421,14 @@ export function getMods() {
 
   cacheMods = Object.fromEntries(modsMap.entries())
   return cacheMods
+}
+
+export function getMod(tag: string) {
+  const mods = getMods();
+  return mods[tag] || null;
+}
+
+export function getLatestMod(tag: string) {
+  const mods = getLatestMods();
+  return mods[tag] || null;
 }

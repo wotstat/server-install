@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getLatestMods, getMods } from './mods-loader'
+import { getLatestMod, getLatestMods, getMod, getMods } from './mods-loader'
 import { schedule } from "node-cron";
 
 const app = new Hono()
@@ -61,8 +61,21 @@ app.get('/mods', c => {
   return c.json(getMods())
 })
 
+app.get('/mods/latest', c => {
+  return c.json(getLatestMods())
+})
+
+// deprecated
 app.get('/mods-latest', c => {
   return c.json(getLatestMods())
+})
+
+app.get('/mod/:tag', c => {
+  return c.json(getMod(c.req.param('tag')))
+})
+
+app.get('/mod/:tag/latest', c => {
+  return c.json(getLatestMod(c.req.param('tag')))
 })
 
 export default app
