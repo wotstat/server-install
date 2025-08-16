@@ -10,7 +10,7 @@ app.route('/api', Api)
 
 try { loadTask() }
 catch (error) { console.error(error) }
-schedule('* 8,20 * * *', async () => {
+schedule('0 * * * *', async () => {
   try { await loadTask() }
   catch (error) { console.error(error) }
 });
