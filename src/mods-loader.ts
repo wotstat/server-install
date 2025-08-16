@@ -249,7 +249,8 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
 
   const existingMod = getModQuery.get({ $tag: tag, $extension: extension, $hash: file.hash });
 
-  const canaryPublish = canaryPercent !== null ? new Date().toISOString() : null;
+  const canaryShouldExist = canaryPercent !== null && canaryPercent !== 0;
+  const canaryPublish = canaryShouldExist ? new Date().toISOString() : null;
 
   if (!existingMod) {
     insertModQuery.run({
@@ -265,14 +266,22 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
     });
     cacheInvalidate();
   } else {
-    if (existingMod.canaryPercent !== canaryPercent && canaryPercent !== null) {
-      if (existingMod.canaryPublish === null) {
-        updateCanary.run({ $tag: tag, $hash: file.hash, $extension: extension, $canaryPublish: canaryPublish, $canaryPercent: canaryPercent });
-      } else {
-        updateCanaryPercent.run({ $tag: tag, $hash: file.hash, $extension: extension, $canaryPercent: canaryPercent });
-      }
-      cacheInvalidate();
+
+    if (existingMod.canaryPercent == canaryPercent)
+      return
+
+    const existingCanary = existingMod.canaryPublish !== null;
+
+    const base = { $tag: tag, $hash: file.hash, $extension: extension };
+
+    if (!existingCanary && canaryShouldExist) {
+      updateCanary.run({ ...base, $canaryPublish: canaryPublish, $canaryPercent: canaryPercent });
+    } else if (existingCanary && canaryShouldExist) {
+      updateCanaryPercent.run({ ...base, $canaryPercent: canaryPercent });
+    } else if (existingCanary && !canaryShouldExist) {
+      updateCanary.run({ ...base, $canaryPublish: null, $canaryPercent: null });
     }
+    cacheInvalidate();
   }
 }
 
