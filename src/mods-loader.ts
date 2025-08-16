@@ -140,7 +140,11 @@ function modAssets(assets: NonNullable<ReturnType<typeof modAssetPrepare>>[]) {
 }
 
 async function loadGithubLatestReleaseInfo(owner: string, repo: string): Promise<LoadInfoStrategyResult> {
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+    headers: {
+      'Authorization': `token ${Bun.env.GITHUB_API_TOKEN}`
+    }
+  });
 
   if (!response.ok) throw new Error(`Failed to fetch latest release info for ${owner}/${repo}: [${response.statusText}] ${await response.text()}`);
 

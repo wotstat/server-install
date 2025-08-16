@@ -8,3 +8,5 @@ services:
       - ../install-mods-store:/app/store
     ports:
       - 9108:3000
+    environment:
+      - GITHUB_API_TOKEN
