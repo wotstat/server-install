@@ -262,7 +262,7 @@ async function saveModFile(file: NonNullable<Awaited<ReturnType<typeof loadModFi
       $filename: file.fullName,
       $url: url,
       $canaryPublish: canaryPublish,
-      $canaryPercent: canaryPercent
+      $canaryPercent: canaryShouldExist ? canaryPercent : null
     });
     cacheInvalidate();
   } else {
