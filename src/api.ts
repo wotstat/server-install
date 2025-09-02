@@ -61,7 +61,7 @@ app.get('/latest-game-version', c => {
   })
 })
 
-// console.log(await jwtSign({ mod: 'wotstat.browser-patch' }, Bun.env.JWT_SECRET as string));
+console.log(await jwtSign({ mod: 'me.poliroid.modslistapi' }, Bun.env.JWT_SECRET as string));
 
 app.post('/upload', async c => {
   const formData = await c.req.formData()
@@ -78,7 +78,8 @@ app.post('/upload', async c => {
 
   try {
     const t = await jwtVerify(token, Bun.env.JWT_SECRET as string)
-    if (!(t.mod && t.mod != '' && t.mod === nameTag)) return c.json({ error: 'Invalid token' }, 401)
+    if (!t.mod || t.mod == '') return c.json({ error: 'Invalid token data' }, 401)
+    if (t.mod !== nameTag) return c.json({ error: `Invalid token data, expected ${nameTag} but got ${t.mod}` }, 401)
   } catch (error) {
     return c.json({ error: 'Invalid token' }, 401)
   }
