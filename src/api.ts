@@ -61,7 +61,7 @@ app.get('/latest-game-version', c => {
   })
 })
 
-console.log(await jwtSign({ mod: 'me.poliroid.modslistapi' }, Bun.env.JWT_SECRET as string));
+// console.log(await jwtSign({ mod: 'me.poliroid.modslistapi' }, Bun.env.JWT_SECRET as string));
 
 app.post('/upload', async c => {
   const formData = await c.req.formData()
