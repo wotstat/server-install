@@ -1,11 +1,11 @@
-import { mods, type ModSource } from "./mods";
+import { mods, type ModSource, type SaveTarget } from "./mods";
 import { XMLParser } from 'fast-xml-parser';
 import unzipper from 'unzipper'
 import { Database } from "bun:sqlite";
 import { rm } from "node:fs/promises";
 
 const parser = new XMLParser();
-const hasher = new Bun.CryptoHasher("sha256");
+export const hasher = new Bun.CryptoHasher("sha256");
 
 
 type ModSchema = {
@@ -117,7 +117,7 @@ type LoadInfoStrategyResult = {
   canary: number | null;
 };
 
-function modAssetPrepare(name: string, url: string) {
+export function modAssetPrepare(name: string, url: string) {
   const match = name.match(/^(.*?)_?((?:\d+\.)*(?:\d+))?\.(mtmod|wotmod)$/);
 
   if (!match || match.length < 4) return null;
@@ -200,6 +200,11 @@ async function downloadModFile(url: string) {
   if (!response.ok) throw new Error(`Failed to download mod file from ${url}`);
 
   const blob = await response.blob();
+
+  return await prepareModFile(blob as any);
+}
+
+export async function prepareModFile(blob: Blob) {
   const folder = await unzipper.Open.buffer(Buffer.from(await blob.arrayBuffer()))
 
   const metaFile = folder.files.find(file => file.path === 'meta.xml');
@@ -296,7 +301,7 @@ async function removeModByTag(tag: string) {
   cacheInvalidate();
 }
 
-async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string, canaryPercent: number | null) {
+export async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string, canaryPercent: number | null, target?: SaveTarget) {
 
   const { mtMod, wotMod } = mod;
 
@@ -305,21 +310,21 @@ async function saveMod(mod: Awaited<ReturnType<typeof loadMod>>, tag: string, ca
     return null;
   }
 
-  await saveModFile(mtMod ? mtMod : wotMod!, tag, 'mtmod', canaryPercent)
-  await saveModFile(wotMod ? wotMod : mtMod!, tag, 'wotmod', canaryPercent)
+  if (target !== 'wot-only') await saveModFile(mtMod ? mtMod : wotMod!, tag, 'mtmod', canaryPercent)
+  if (target !== 'mt-only') await saveModFile(wotMod ? wotMod : mtMod!, tag, 'wotmod', canaryPercent)
 }
 
 
 const strategy = {
-  'gitlab-description': async (tag: string, source: ModSource & { type: 'gitlab-description' }) => {
+  'gitlab-description': async (tag: string, source: ModSource & { type: 'gitlab-description' }, target?: SaveTarget) => {
     const assets = await loadGitlabLatestReleaseInfoFromDescription(source.repoId);
     const modFile = await loadMod(assets.assets);
-    await saveMod(modFile, tag, assets.canary);
+    await saveMod(modFile, tag, assets.canary, target);
   },
-  'github': async (tag: string, source: ModSource & { type: 'github' }) => {
+  'github': async (tag: string, source: ModSource & { type: 'github' }, target?: SaveTarget) => {
     const assets = await loadGithubLatestReleaseInfo(source.owner, source.repo);
     const modFile = await loadMod(assets.assets);
-    await saveMod(modFile, tag, assets.canary);
+    await saveMod(modFile, tag, assets.canary, target);
   },
 } as const;
 
@@ -332,7 +337,7 @@ export async function loadTask() {
 
     try {
       const modStrategy = strategy[mod.source.type];
-      await modStrategy(mod.tag, mod.source as any);
+      await modStrategy(mod.tag, mod.source as any, mod.target);
     } catch (error) {
       console.error(`Error loading mod ${mod.tag} from source ${mod.source.type}: ${error}`);
       console.error(error);

@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
-import { getLatestMod, getLatestMods, getMod, getMods } from './mods-loader'
+import { sign as jwtSign, verify as jwtVerify } from 'hono/jwt'
+import { getLatestMod, getLatestMods, getMod, getMods, hasher, modAssetPrepare, prepareModFile, saveMod } from './mods-loader'
 import { schedule } from "node-cron";
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+const uploadHtml = readFileSync(join(__dirname, 'upload.html'), 'utf-8')
 
 const app = new Hono()
 
@@ -56,6 +61,54 @@ app.get('/latest-game-version', c => {
   })
 })
 
+// console.log(await jwtSign({ mod: 'wotstat.browser-patch' }, Bun.env.JWT_SECRET as string));
+
+app.post('/upload', async c => {
+  const formData = await c.req.formData()
+  const modFile = formData.get('mod') as File | null
+  const nameTag = formData.get('name-tag') as string | null
+  const canary = formData.get('canary') as string | null
+  const target = formData.get('target') as string | null
+  const token = formData.get('token') as string | null
+
+  if (!modFile) return c.json({ error: 'No file uploaded' }, 400)
+  if (!nameTag) return c.json({ error: 'No name tag provided' }, 400)
+  if (target !== 'mt-only' && target !== 'wot-only' && target !== 'any') return c.json({ error: 'Invalid target provided' }, 400)
+  if (!token) return c.json({ error: 'No token provided' }, 400)
+
+  try {
+    const t = await jwtVerify(token, Bun.env.JWT_SECRET as string)
+    if (!(t.mod && t.mod != '' && t.mod === nameTag)) return c.json({ error: 'Invalid token' }, 401)
+  } catch (error) {
+    return c.json({ error: 'Invalid token' }, 401)
+  }
+
+  const mod = await prepareModFile(modFile)
+  const hash = hasher.update(await mod.asset.arrayBuffer()).digest('hex');
+
+  const asset = modAssetPrepare(modFile.name, hash)
+
+  if (!asset) return c.json({ error: 'Invalid mod file' }, 400)
+
+  const modAsset = {
+    blob: mod.asset,
+    nameTag: nameTag,
+    id: mod.id ?? nameTag,
+    version: mod.version,
+    hash,
+    fullName: asset.fullName,
+    withoutExtName: asset.withoutExtName,
+  }
+
+  console.log('Saving mod:', { mtMod: modAsset, wotMod: null }, nameTag, canary ? Number.parseFloat(canary) : null, target == 'any' ? undefined : target);
+
+  await saveMod({ mtMod: modAsset, wotMod: null }, nameTag, canary ? Number.parseFloat(canary) : null, target == 'any' ? undefined : target)
+  return c.json({ success: true })
+})
+
+app.get('/upload', c => {
+  return c.body(uploadHtml, 200, { 'Content-Type': 'text/html' })
+})
 
 app.get('/mods', c => {
   return c.json(getMods())

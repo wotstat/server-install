@@ -6,7 +6,10 @@ type ModsTags =
   'wotstat.lootbox-open-multiplier' |
   'wotstat.data-provider' |
   'me.poliroid.modslistapi' |
-  'izeberg.modssettingsapi'
+  'izeberg.modssettingsapi' |
+  'net.openwg.gameface'
+
+export type SaveTarget = 'wot-only' | 'mt-only'
 
 export type ModSource = {
   type: 'gitlab-description',
@@ -20,6 +23,7 @@ export type ModSource = {
 
 type Mod = {
   tag: ModsTags
+  target?: SaveTarget
   source?: ModSource,
 }
 
@@ -33,10 +37,20 @@ export const mods: Mod[] = [
   { tag: 'izeberg.modssettingsapi', source: { type: 'github', owner: 'izeberg', repo: 'modssettingsapi' } },
   {
     tag: 'me.poliroid.modslistapi',
+    target: 'wot-only',
     source: {
       type: 'gitlab-description',
       repo: 'wot-public-mods/mods-list',
       repoId: 26509092
+    }
+  },
+  {
+    tag: 'net.openwg.gameface',
+    target: 'wot-only',
+    source: {
+      type: 'gitlab-description',
+      repo: 'openwg/wot.gameface',
+      repoId: 68695173
     }
   },
 ]
