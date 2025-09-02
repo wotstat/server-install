@@ -7,7 +7,9 @@ type ModsTags =
   'wotstat.data-provider' |
   'me.poliroid.modslistapi' |
   'izeberg.modssettingsapi' |
-  'net.openwg.gameface'
+  'net.openwg.gameface' |
+  'panikaxa.lesta.quick_demount' |
+  'panikaxa.wot.quick_demount'
 
 export type SaveTarget = 'wot-only' | 'mt-only'
 
