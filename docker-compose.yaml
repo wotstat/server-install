@@ -10,3 +10,4 @@ services:
       - 9108:3000
     environment:
       - GITHUB_API_TOKEN
+      - JWT_SECRET
