@@ -31,6 +31,8 @@ type Mod = {
 
 
 export const mods: Mod[] = [
+  { tag: 'panikaxa.lesta.quick_demount' },
+  { tag: 'panikaxa.wot.quick_demount' },
   { tag: 'wotstat.analytics', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-analytics' } },
   { tag: 'wotstat.positions', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-positions' } },
   { tag: 'wotstat.widgets', source: { type: 'github', owner: 'wotstat', repo: 'wotstat-widgets' } },
